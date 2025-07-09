@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Edit Event</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<div class="container mt-5">
+    <h2>Edit Event</h2>
+    <form method="POST">
+        <div class="mb-3">
+            <label>Name</label>
+            <input type="text" name="name" class="form-control" value="{{ event.Name }}" required>
+        </div>
+        <div class="mb-3">
+            <label>Date</label>
+            <input type="date" name="date" class="form-control" value="{{ event.Date }}" required>
+        </div>
+        <div class="mb-3">
+            <label>Location</label>
+            <input type="text" name="location" class="form-control" value="{{ event.Location }}" required>
+        </div>
+        <div class="mb-3">
+            <label>Capacity</label>
+            <input type="number" name="capacity" class="form-control" value="{{ event.Capacity }}" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Update</button>
+        <a href="/organizer/dashboard" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+</body>
+</html>
