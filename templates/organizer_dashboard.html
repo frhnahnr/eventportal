@@ -6,24 +6,30 @@
 </head>
 <body class="bg-light">
 
-<!-- Navbar -->
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-    <div class="container">
-        <a class="navbar-brand" href="#">EventHorizon</a>
-        <div class="ms-auto">
-            <a href="/logout" class="btn btn-outline-light">Logout</a>
-        </div>
+<!-- EventHorizon Navbar -->
+<nav class="navbar navbar-dark bg-dark">
+    <div class="container-fluid d-flex justify-content-between align-items-center">
+        <span class="navbar-brand mb-0 h1">EventHorizon</span>
+        <form action="/logout" method="post">
+            <button type="submit" class="btn btn-outline-light btn-sm">Logout</button>
+        </form>
     </div>
 </nav>
 
-<!-- Page Content -->
+<!-- Dashboard Table -->
 <div class="container mt-4">
     <h2>Organizer Dashboard</h2>
     <a href="/add" class="btn btn-success mb-3">Create New Event</a>
     <table class="table table-bordered">
         <thead class="table-dark">
         <tr>
-            <th>Name</th><th>Date</th><th>Location</th><th>Capacity</th><th>Attendees</th><th>Actions</th>
+            <th>Name</th>
+            <th>Date</th>
+            <th>Location</th>
+            <th>Capacity</th>
+            <th>Description</th>
+            <th>Attendees</th>
+            <th>Actions</th>
         </tr>
         </thead>
         <tbody>
@@ -33,6 +39,7 @@
                 <td>{{ event.Date }}</td>
                 <td>{{ event.Location }}</td>
                 <td>{{ event.Capacity }}</td>
+                <td>{{ event.Description }}</td>
                 <td>{{ event.Registered }}</td>
                 <td>
                     <a href="/edit/{{ event.EventID }}" class="btn btn-sm btn-warning">Edit</a>
