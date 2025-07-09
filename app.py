@@ -90,10 +90,10 @@ def login():
             return render_template('login.html', error="Invalid credentials")
     return render_template('login.html')
 
-@app.route('/logout')
+@app.route('/logout', methods=['GET', 'POST'])
 def logout():
     session.clear()
-    return redirect('/events')  # Redirect to public page
+    return redirect('/events')
 
 # Organizer dashboard
 @app.route('/organizer/dashboard')
@@ -154,9 +154,12 @@ def add_event():
         date = request.form['date']
         location = request.form['location']
         capacity = request.form['capacity']
+        description = request.form['description']
         conn = get_db()
-        conn.execute("INSERT INTO Events (Name, Date, Location, Capacity, OrganizerID) VALUES (?, ?, ?, ?, ?)",
-                     (name, date, location, capacity, session['user_id']))
+        conn.execute(
+            "INSERT INTO Events (Name, Date, Location, Capacity, Description, OrganizerID) VALUES (?, ?, ?, ?, ?, ?)",
+            (name, date, location, capacity, description, session['user_id'])
+        )
         conn.commit()
         return redirect('/organizer/dashboard')
     return render_template('add_event.html')
@@ -172,10 +175,16 @@ def edit_event(event_id):
         date = request.form['date']
         location = request.form['location']
         capacity = request.form['capacity']
-        conn.execute("UPDATE Events SET Name=?, Date=?, Location=?, Capacity=? WHERE EventID=?",
-                     (name, date, location, capacity, event_id))
+        description = request.form['description']  # ✅ ADD THIS LINE
+
+        conn.execute("""
+            UPDATE Events
+            SET Name=?, Date=?, Location=?, Capacity=?, Description=?
+            WHERE EventID=?
+        """, (name, date, location, capacity, description, event_id))  # ✅ INCLUDE Description in query
         conn.commit()
         return redirect('/organizer/dashboard')
+
     event = conn.execute("SELECT * FROM Events WHERE EventID=?", (event_id,)).fetchone()
     return render_template('edit_event.html', event=event)
 
