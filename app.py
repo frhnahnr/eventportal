@@ -41,6 +41,9 @@ def login():
         else:
             return render_template('login.html', error="Invalid credentials")
     return render_template('login.html')
+    except Exception as e:
+        print("Login error:", e)  # Add this line
+        return "Internal Server Error", 500
 
 @app.route('/logout', methods=['GET', 'POST'])
 def logout():
