@@ -1,202 +1,83 @@
-from flask import Flask, render_template, request, redirect, url_for, session
-import pyodbc
-import os
+from flask import Flask, render_template, url_for, request, session, redirect, flash
+from sqlalchemy import create_engine
+from sqlalchemy.orm import scoped_session, sessionmaker
+from passlib.hash import sha256_crypt
+import urllib
+
+# URL-encode password
+password = urllib.parse.quote_plus("F@rhanah13")
+
+# Azure SQL connection string
+engine = create_engine(
+    f"mssql+pyodbc://sqladmin:{password}@eventportal-sql.database.windows.net/eventhorizon-db?driver=ODBC+Driver+17+for+SQL+Server"
+)
+
+db = scoped_session(sessionmaker(bind=engine))
 
 app = Flask(__name__)
-app.secret_key = 'supersecret'
+app.secret_key = "RadheKrishna"
 
-# Azure SQL Database connection settings
-server = 'eventportal-sql.database.windows.net'
-database = 'eventhorizon-db'
-username = 'sqladmin'
-password = 'F@rhanah'
-driver = '{ODBC Driver 17 for SQL Server}'
-
-def get_db():
-    try:
-        conn_str = f'DRIVER={driver};SERVER={server};DATABASE={database};UID={username};PWD={password}'
-        conn = pyodbc.connect(conn_str)
-        return conn
-    except Exception as e:
-        print("❌ Database connection error:", e)
-        return None
-
-@app.route('/')
-def home():
-    return redirect('/login')
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        email = request.form['email']
-        password = request.form['password']
-        role = request.form['role']
-
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT * FROM Users WHERE Email=? AND Password=? AND Role=?",
-            (email, password, role)
-        )
-        user = cursor.fetchone()
-        if user:
-            session['user_id'] = user.UserID
-            session['email'] = user.Email
-            session['role'] = role
-            if role == 'organizer':
-                return redirect('/organizer/dashboard')
-            elif role == 'attendee':
-                return redirect('/attendee/dashboard')
-        else:
-            return render_template('login.html', error="Invalid credentials")
-    return render_template('login.html')
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect('/events')
-
-@app.route('/organizer/dashboard')
-def organizer_dashboard():
-    if session.get('role') != 'organizer':
-        return redirect('/login')
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT e.*, COUNT(a.AttendeeID) AS Registered
-        FROM Events e
-        LEFT JOIN Attendees a ON e.EventID = a.EventID
-        WHERE e.OrganizerID = ?
-        GROUP BY e.EventID, e.Name, e.Date, e.Location, e.Capacity, e.Description, e.OrganizerID
-    ''', (session['user_id'],))
-    events = cursor.fetchall()
-    return render_template('organizer_dashboard.html', events=events)
-
-@app.route('/events')
-def public_events():
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM Events ORDER BY Date")
-    events = cursor.fetchall()
-    return render_template('public_events.html', events=events)
-
-@app.route('/attendee/dashboard')
-def attendee_dashboard():
-    if session.get('role') != 'attendee':
-        return redirect('/login')
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM Events")
-    events = cursor.fetchall()
-    return render_template('attendee_dashboard.html', events=events)
-
-@app.route('/register', methods=['GET', 'POST'])
+@app.route("/register", methods=['POST', 'GET'])
 def register():
-    if request.method == 'POST':
-        name = request.form['name']
-        email = request.form['email']
-        password = request.form['password']
-        role = 'attendee'
+    if request.method == "POST":
+        name = request.form.get("name")
+        username = request.form.get("username")
+        password = request.form.get("password")
+        confirm = request.form.get("confirm")
+        secure_password = sha256_crypt.encrypt(str(password))
 
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Users WHERE Email=?", (email,))
-        existing = cursor.fetchone()
-        if existing:
-            return render_template('register.html', error="Email already exists.")
-        cursor.execute("INSERT INTO Users (Email, Password, Role) VALUES (?, ?, ?)",
-                       (email, password, role))
-        conn.commit()
-        return render_template('register.html', success="Account created successfully! You may now log in.")
+        usernamedata = db.execute("SELECT username FROM users WHERE username=:username",
+                                  {"username": username}).fetchone()
+        if usernamedata is None:
+            if password == confirm:
+                db.execute("INSERT INTO users(name, username, password) VALUES(:name, :username, :password)",
+                           {"name": name, "username": username, "password": secure_password})
+                db.commit()
+                flash("You are registered and can now login", "success")
+                return redirect(url_for('login'))
+            else:
+                flash("Passwords do not match", "danger")
+                return render_template('register.html')
+        else:
+            flash("User already exists, please login or contact admin", "danger")
+            return redirect(url_for('login'))
     return render_template('register.html')
 
-@app.route('/add', methods=['GET', 'POST'])
-def add_event():
-    if session.get('role') != 'organizer':
-        return redirect('/login')
-    if request.method == 'POST':
-        name = request.form['name']
-        date = request.form['date']
-        location = request.form['location']
-        capacity = request.form['capacity']
-        description = request.form['description']
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO Events (Name, Date, Location, Capacity, Description, OrganizerID) VALUES (?, ?, ?, ?, ?, ?)",
-            (name, date, location, capacity, description, session['user_id'])
-        )
-        conn.commit()
-        return redirect('/organizer/dashboard')
-    return render_template('add_event.html')
 
-@app.route('/edit/<int:event_id>', methods=['GET', 'POST'])
-def edit_event(event_id):
-    if session.get('role') != 'organizer':
-        return redirect('/login')
-    conn = get_db()
-    cursor = conn.cursor()
-    if request.method == 'POST':
-        name = request.form['name']
-        date = request.form['date']
-        location = request.form['location']
-        capacity = request.form['capacity']
-        description = request.form['description']
-        cursor.execute("""
-            UPDATE Events
-            SET Name=?, Date=?, Location=?, Capacity=?, Description=?
-            WHERE EventID=?
-        """, (name, date, location, capacity, description, event_id))
-        conn.commit()
-        return redirect('/organizer/dashboard')
-    cursor.execute("SELECT * FROM Events WHERE EventID=?", (event_id,))
-    event = cursor.fetchone()
-    return render_template('edit_event.html', event=event)
+@app.route("/login", methods=["POST", "GET"])
+def login():
+    if request.method == "POST":
+        username = request.form.get("name")
+        password = request.form.get("password")
 
-@app.route('/delete/<int:event_id>', methods=['GET', 'POST'])
-def delete_event(event_id):
-    if session.get('role') != 'organizer':
-        return redirect('/login')
-    conn = get_db()
-    cursor = conn.cursor()
-    if request.method == 'POST':
-        cursor.execute("DELETE FROM Events WHERE EventID=?", (event_id,))
-        conn.commit()
-        return redirect('/organizer/dashboard')
-    cursor.execute("SELECT * FROM Events WHERE EventID=?", (event_id,))
-    event = cursor.fetchone()
-    return render_template('delete_event.html', event=event)
+        usernamedata = db.execute("SELECT username FROM users WHERE username=:username",
+                                  {"username": username}).fetchone()
+        passworddata = db.execute("SELECT password FROM users WHERE username=:username",
+                                  {"username": username}).fetchone()
 
-@app.route('/attendee/register/<int:event_id>', methods=['GET', 'POST'])
-def register_for_event(event_id):
-    if session.get('role') != 'attendee':
-        return redirect('/login')
+        if usernamedata is None:
+            flash("No such username", "danger")
+            return render_template('login.html')
+        else:
+            if sha256_crypt.verify(password, passworddata[0]):
+                session["log"] = True
+                flash("You are now logged in!", "success")
+                return redirect(url_for('home'))
+            else:
+                flash("Incorrect password", "danger")
+                return render_template('login.html')
+    return render_template('login.html')
 
-    conn = get_db()
-    cursor = conn.cursor()
 
-    cursor.execute(
-        "SELECT * FROM Attendees WHERE Email=? AND EventID=?",
-        (session['email'], event_id)
-    )
-    existing = cursor.fetchone()
+@app.route("/logout")
+def logout():
+    session.clear()
+    flash("You are now logged out", "success")
+    return redirect(url_for('login'))
 
-    if existing:
-        return render_template('attendee_registration_result.html', message="You are already registered for this event.")
-
-    if request.method == 'POST':
-        full_name = request.form['full_name']
-        cursor.execute(
-            "INSERT INTO Attendees (FullName, Email, EventID) VALUES (?, ?, ?)",
-            (full_name, session['email'], event_id)
-        )
-        conn.commit()
-        return render_template('attendee_registration_result.html', message="Successfully registered for the event!")
-
-    cursor.execute("SELECT * FROM Events WHERE EventID=?", (event_id,))
-    event = cursor.fetchone()
-    return render_template('attendee_register_event.html', event=event)
+@app.route("/")
+def home():
+    return render_template('home.html')
 
 if __name__ == '__main__':
     app.run(debug=True)
-
