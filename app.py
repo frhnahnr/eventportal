@@ -192,5 +192,44 @@ def delete_event(event_id):
     event = conn.execute("SELECT * FROM Events WHERE EventID=?", (event_id,)).fetchone()
     return render_template('delete_event.html', event=event)
 
+@app.route('/init-db')
+def init_db():
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    CREATE TABLE Users (
+        UserID INT PRIMARY KEY IDENTITY,
+        Email NVARCHAR(100),
+        Password NVARCHAR(100),
+        Role NVARCHAR(50)
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE Events (
+        EventID INT PRIMARY KEY IDENTITY,
+        Name NVARCHAR(100),
+        Description NVARCHAR(MAX),
+        Date DATE,
+        Location NVARCHAR(100),
+        Capacity INT,
+        OrganizerID INT
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE Attendees (
+        AttendeeID INT PRIMARY KEY IDENTITY,
+        FullName NVARCHAR(100),
+        Email NVARCHAR(100),
+        EventID INT
+    )
+    """)
+
+    conn.commit()
+    return "Tables created successfully!"
+
+
 if __name__ == '__main__':
     app.run(debug=True)
