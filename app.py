@@ -3,115 +3,79 @@ import pyodbc
 import os
 
 app = Flask(__name__)
-app.secret_key = 'supersecret'
+app.secret_key = 'supersecret'  # For session management
 
-# Database connection (Azure SQL)
+# Azure SQL connection
 def get_db():
-    conn_str = os.getenv("DATABASE_URL")
+    conn_str = os.getenv("AZURE_SQL_CONNECTIONSTRING")
     if not conn_str:
-        raise Exception("DATABASE_URL is not set.")
-    conn = pyodbc.connect(conn_str)
-    conn.autocommit = True
-    return conn
+        raise Exception("AZURE_SQL_CONNECTIONSTRING is not set.")
+    return pyodbc.connect(conn_str)
 
+# HOME PAGE
 @app.route('/')
 def index():
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM Events")
+    cursor.execute("SELECT * FROM events")
     events = cursor.fetchall()
     return render_template('index.html', events=events)
 
+# LOGIN PAGE
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        email = request.form['email']
-        password = request.form['password']
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Users WHERE Email=? AND Password=?", (email, password))
-        user = cursor.fetchone()
-        if user:
-            session['user_id'] = user[0]
-            session['role'] = user[3]
-            return redirect(url_for('dashboard'))
-        else:
-            return "Login failed"
+        role = request.form['role']
+        session['role'] = role
+        return redirect(url_for('dashboard'))
     return render_template('login.html')
 
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        email = request.form['email']
-        password = request.form['password']
-        role = request.form['role']
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO Users (Email, Password, Role) VALUES (?, ?, ?)", (email, password, role))
-        return redirect(url_for('login'))
-    return render_template('register.html')
-
+# DASHBOARD FOR ORGANIZERS
 @app.route('/dashboard')
 def dashboard():
-    if 'user_id' not in session:
+    if session.get('role') != 'organizer':
         return redirect(url_for('login'))
-
-    user_id = session['user_id']
-    role = session['role']
     conn = get_db()
     cursor = conn.cursor()
+    cursor.execute("SELECT * FROM events")
+    events = cursor.fetchall()
+    return render_template('dashboard.html', events=events)
 
-    if role == 'Organizer':
-        cursor.execute("SELECT * FROM Events WHERE OrganizerID=?", (user_id,))
-        events = cursor.fetchall()
-    else:
-        cursor.execute("""
-            SELECT E.* FROM Events E
-            JOIN Registrations R ON E.EventID = R.EventID
-            WHERE R.AttendeeID=?
-        """, (user_id,))
-        events = cursor.fetchall()
-
-    return render_template('dashboard.html', events=events, role=role)
-
-@app.route('/create', methods=['GET', 'POST'])
-def create_event():
-    if 'user_id' not in session or session['role'] != 'Organizer':
+# ADD NEW EVENT
+@app.route('/add', methods=['POST'])
+def add_event():
+    if session.get('role') != 'organizer':
         return redirect(url_for('login'))
-
-    if request.method == 'POST':
-        name = request.form['name']
-        date = request.form['date']
-        location = request.form['location']
-        capacity = request.form['capacity']
-        organizer_id = session['user_id']
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO Events (Name, Date, Location, Capacity, OrganizerID) VALUES (?, ?, ?, ?, ?)",
-            (name, date, location, capacity, organizer_id)
-        )
-        return redirect(url_for('dashboard'))
-    return render_template('create.html')
-
-@app.route('/register_event/<int:event_id>')
-def register_event(event_id):
-    if 'user_id' not in session or session['role'] != 'Attendee':
-        return redirect(url_for('login'))
-
-    attendee_id = session['user_id']
+    name = request.form['name']
+    date = request.form['date']
+    location = request.form['location']
+    capacity = request.form['capacity']
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO Registrations (EventID, AttendeeID) VALUES (?, ?)", (event_id, attendee_id))
+    cursor.execute("INSERT INTO events (name, date, location, capacity) VALUES (?, ?, ?, ?)", 
+                   (name, date, location, capacity))
+    conn.commit()
     return redirect(url_for('dashboard'))
 
+# REGISTER FOR EVENT
+@app.route('/register/<int:event_id>', methods=['POST'])
+def register(event_id):
+    name = request.form['name']
+    contact = request.form['contact']
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO registrations (event_id, name, contact) VALUES (?, ?, ?)", 
+                   (event_id, name, contact))
+    conn.commit()
+    return redirect(url_for('index'))
+
+# LOGOUT
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('index'))
 
-# Azure-compatible port setup
+# RUN ON AZURE PORT
 if __name__ == '__main__':
-    import sys
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 8000))  # Azure expects port 8000
     app.run(host='0.0.0.0', port=port)
