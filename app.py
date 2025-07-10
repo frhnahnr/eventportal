@@ -1,16 +1,17 @@
 from flask import Flask, render_template, request, redirect, session
 import pyodbc
+import os
 
 app = Flask(__name__)
 app.secret_key = 'supersecret'
 
-# ✅ Azure SQL connection
+# ✅ Azure SQL connection string
 conn_str = (
     'DRIVER={ODBC Driver 17 for SQL Server};'
     'SERVER=tcp:event-horizon.database.windows.net,1433;'
     'DATABASE=eventhorizon-db;'
     'UID=frhnahnr;'
-    'PWD=F@rhanah13;'  # Replace with actual password
+    'PWD=F@rhanah13;'  # 🔐 Consider moving to env variables in production
     'Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;'
 )
 
@@ -23,26 +24,27 @@ def home():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST':
-        email = request.form['email']
-        password = request.form['password']
-        role = request.form['role']
+    try:
+        if request.method == 'POST':
+            email = request.form['email']
+            password = request.form['password']
+            role = request.form['role']
 
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("SELECT UserID, Email FROM Users WHERE Email=? AND Password=? AND Role=?", (email, password, role))
-        user = cursor.fetchone()
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("SELECT UserID, Email FROM Users WHERE Email=? AND Password=? AND Role=?", (email, password, role))
+            user = cursor.fetchone()
 
-        if user:
-            session['user_id'] = user.UserID
-            session['email'] = user.Email
-            session['role'] = role
-            return redirect('/organizer/dashboard' if role == 'organizer' else '/attendee/dashboard')
-        else:
-            return render_template('login.html', error="Invalid credentials")
-    return render_template('login.html')
+            if user:
+                session['user_id'] = user.UserID
+                session['email'] = user.Email
+                session['role'] = role
+                return redirect('/organizer/dashboard' if role == 'organizer' else '/attendee/dashboard')
+            else:
+                return render_template('login.html', error="Invalid credentials")
+        return render_template('login.html')
     except Exception as e:
-        print("Login error:", e)  # Add this line
+        print("Login error:", e)
         return "Internal Server Error", 500
 
 @app.route('/logout', methods=['GET', 'POST'])
