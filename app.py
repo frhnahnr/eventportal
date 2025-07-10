@@ -6,7 +6,16 @@ app = Flask(__name__)
 app.secret_key = 'supersecret'
 
 # Get Azure SQL connection string from environment variable
-conn_str = os.getenv("AZURE_SQL_CONNECTIONSTRING")
+UID = os.environ.get('DB_UID')
+PWD = os.environ.get('DB_PWD')
+
+conn_str = (
+    'DRIVER={ODBC Driver 17 for SQL Server};'
+    'SERVER=tcp:event-horizon.database.windows.net,1433;'
+    'DATABASE=eventhorizon-db;'
+    f'UID={UID};PWD={PWD};'
+    'Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;'
+)
 
 # Helper to get database connection
 def get_db():
